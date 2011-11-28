@@ -2,64 +2,69 @@ import uuid
 from datetime import date
 from urllib2 import URLError
 
-from celery.task import task
 from django.conf import settings
+from celery.task import task
 
 from responsys import Responsys, NewsletterException, UnauthorizedException
 from models import Subscriber
 from newsletters import *
 
 
-class Update(object):
-    SUBSCRIBE=1
-    UNSUBSCRIBE=2
-    SET=3
+# A few constants to indicate the type of action to take
+# on a user with a list of newsletters
+SUBSCRIBE=1
+UNSUBSCRIBE=2
+SET=3
 
 
-def parse_newsletters(record, type, newsletters, optout):
-    """ Parse the newsletter data from a comma-delimited string and
-    set the appropriate fields in the record """
+def parse_newsletters(record, type, newsletters):
+    """Utility function to take a list of newsletters and according
+    the type of action (subscribe, unsubscribe, and set) set the
+    appropriate flags in `record` which is a dict of parameters that
+    will be sent to Responsys."""
 
     newsletters = [x.strip() for x in newsletters.split(',')]
 
-    if type == Update.SUBSCRIBE or type == Update.SET:
+    if type == SUBSCRIBE or type == SET:
         # Subscribe the user to these newsletters
         for nl in newsletters:
             name = newsletter_field(nl)
             if name:
-                record['%s_FLG' % name] = 'N' if optout else 'Y'
+                record['%s_FLG' % name] = 'Y'
                 record['%s_DATE' % name] = date.today().strftime('%Y-%m-%d')
 
     
-    if type == Update.UNSUBSCRIBE or type == Update.SET:
+    if type == UNSUBSCRIBE or type == SET:
         # Unsubscribe the user to these newsletters
         unsubs = newsletters
 
-        if type == Update.SET:
+        if type == SET:
             # Unsubscribe to the inversion of these newsletters
             subs = set(newsletters)
-            all = set(NEWSLETTER_NAMES)
+            all = set(newsletter_names())
             unsubs = all.difference(subs)
 
         for nl in unsubs:
             name = newsletter_field(nl)
             if name:
                 record['%s_FLG' % name] = 'N'
+                record['%s_DATE' % name] = date.today().strftime('%Y-%m-%d')
 
 
-@task(default_retry_delay=60) # retry in 1 minute on failure
+@task(default_retry_delay=60)  # retry in 1 minute on failure
 def update_user(data, authed_email, type):
-    """ Task for updating user's preferences and newsletters.
-    authed_email is the email for the user pulled from the database
-    with their token, if exists """
+    """Task for updating user's preferences and newsletters.
+
+    ``authed_email`` is the email for the user pulled from the database
+    with their token, if exists."""
 
     log = update_user.get_logger()
 
-    # validate parameters
+    # Validate parameters
     if not authed_email and 'email' not in data:
         log.error('No user or email provided')
  
-    # parse the parameters
+    # Parse the parameters
     record = {'EMAIL_ADDRESS_': data['email'],
               'EMAIL_PERMISSION_STATUS_': 'I'}
     
@@ -71,44 +76,31 @@ def update_user(data, authed_email, type):
         'source_url': 'SOURCE_URL'
     }
 
-    # optionally add more fields
+    # Optionally add more fields
     for field in extra_fields.keys():
         if field in data:
             record[extra_fields[field]] = data[field]
 
-    # setup the newsletter fields
-    parse_newsletters(record,
-                      type,
-                      data.get('newsletters', ''),
-                      data.get('optin', 'Y') != 'Y')
+    # Set the newsletter flags in the record
+    parse_newsletters(record, type, data.get('newsletters', ''))
 
-    # make a new token
-    token = str(uuid.uuid4())
+    # Get the user or create them
+    (sub, created) = Subscriber.objects.get_or_create(email=record['EMAIL_ADDRESS_'])
 
-    if type == Update.SUBSCRIBE:
-        # if we are subscribing and the user already exists, don't
-        # update the token. otherwise create a new user with the token.
-        try:
-            sub = Subscriber.objects.get(email=record['EMAIL_ADDRESS_'])
-            token = sub.token
-        except Subscriber.DoesNotExist:
-            sub = Subscriber(email=record['EMAIL_ADDRESS_'], token=token)
-            sub.save()
-    else:
-        # if we are updating an existing user, set a new token
-        sub = Subscriber.objects.get(email=authed_email)
-        # sub.token = token
-        # sub.save()
+    # Update the token if it's a new user or they aren't simply
+    # subscribing from a newsletter form (tokens are one-time use)
+    if created or type != SUBSCRIBE:
+        sub.token = str(uuid.uuid4())
+        record['TOKEN'] = sub.token
+        sub.save()
 
-    record['TOKEN'] = token
-
-    # save the user's fields
+    # Submit the final data to responsys
     try:
         rs = Responsys()
         rs.login(settings.RESPONSYS_USER, settings.RESPONSYS_PASS)
 
         if authed_email and record['EMAIL_ADDRESS_'] != authed_email:
-            # email has changed, we need to delete the previous user
+            # Email has changed, we need to delete the previous user
             rs.delete_list_members(authed_email,
                                    settings.RESPONSYS_FOLDER,
                                    settings.RESPONSYS_LIST)
@@ -118,6 +110,7 @@ def update_user(data, authed_email, type):
                               record.keys(),
                               record.values())
         
+        # Trigger the welcome event unless it is suppressed
         if data.get('trigger_welcome', False) == 'Y':
             rs.trigger_custom_event(record['EMAIL_ADDRESS_'],
                                     settings.RESPONSYS_FOLDER,

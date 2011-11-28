@@ -1,5 +1,13 @@
+"""This data provides an official list of newsletters and tracks
+backend-specific data for working with them in the email provider.
 
-NEWSLETTERS = {
+It's used to lookup the backend-specific newsletter name from a
+generic one passed by the user. This decouples the API from any
+specific email provider."""
+
+__all__ = ('newsletter_field', 'newsletter_name', 'newsletter_fields', 'newsletter_names')
+
+newsletters = {
     'mozilla-and-you': 'MOZILLA_AND_YOU',
     'mobile': 'ABOUT_MOBILE',
     'beta': 'FIREFOX_BETA_NEWS',
@@ -19,15 +27,24 @@ NEWSLETTERS = {
     'app-dev': 'APP_DEV'
 }
 
-NEWSLETTER_NAMES = NEWSLETTERS.keys()
-NEWSLETTER_FIELDS = NEWSLETTERS.values()
-
 
 def newsletter_field(name):
-    return NEWSLETTERS.get(name, False)
+    """Lookup the backend-specific field for the newsletter"""
+    return newsletters.get(name)
 
 
 def newsletter_name(field):
-    i = NEWSLETTER_FIELDS.index(field)
-    return NEWSLETTER_NAMES[i]
+    """Lookup the generic name for this newsletter field"""
+    for k, v in newsletters.iteritems():
+        if v == field:
+            return k
 
+
+def newsletter_names():
+    """Get a list of all the availble newsletters"""
+    return newsletters.keys()
+
+
+def newsletter_fields():
+    """Get a list of all the newsletter backend-specific fields"""
+    return newsletters.values()

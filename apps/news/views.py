@@ -6,7 +6,7 @@ from django.http import HttpResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt 
 from django.conf import settings
 
-from tasks import update_user, Update
+from tasks import update_user, SUBSCRIBE, UNSUBSCRIBE, SET
 from newsletters import *
 from models import Subscriber
 from responsys import Responsys, NewsletterException, UnauthorizedException
@@ -14,8 +14,8 @@ from responsys import Responsys, NewsletterException, UnauthorizedException
 ## Utility functions
 
 def logged_in(f):
-    """ Decorator to check if the user has permission to view these
-    pages """
+    """Decorator to check if the user has permission to view these
+    pages"""
 
     @wraps(f)
     def wrapper(request, token, *args, **kwargs):
@@ -37,7 +37,7 @@ def json_response(data, status=200):
 
 
 def update_user_task(request, type, data=None):
-    """ Call the update_user task async with the right parameters """
+    """Call the update_user task async with the right parameters"""
 
     user = getattr(request, 'subscriber', None)
     update_user.apply_async((data or request.POST.copy(),
@@ -55,7 +55,13 @@ def subscribe(request):
         return json_response({'desc': 'newsletters is missing'},
                              status=500)
 
-    update_user_task(request, Update.SUBSCRIBE)
+    # If the user isn't opting in yet, we tell the system to
+    # unsubscribe them instead of subscribe them, which sets a flag
+    # for those newsletters that still requires confirmation by other
+    # means (confirmation email, etc)
+    optin = request.POST.get('optin', 'Y') == 'Y'
+    update_user_task(request,
+                     SUBSCRIBE if optin else UNSUBSCRIBE)
     return json_response({})
 
 
@@ -69,11 +75,9 @@ def unsubscribe(request, token):
 
     if data.get('optout', 'N') == 'Y':
         data['optin'] = 'N'
+        data['newsletters'] = ','.join(newsletter_names())
 
-        for field in NEWSLETTER_FIELDS:
-            data['newsletters'] = ','.join(NEWSLETTER_NAMES)
-
-    update_user_task(request, Update.UNSUBSCRIBE, data)
+    update_user_task(request, UNSUBSCRIBE, data)
     return json_response({})
 
 
@@ -81,10 +85,10 @@ def unsubscribe(request, token):
 @csrf_exempt
 def user(request, token):
     if request.method == 'POST':
-        update_user_task(request, Update.SET)
+        update_user_task(request, SET)
         return json_response({})
 
-    newsletters = NEWSLETTERS.values()
+    newsletters = newsletter_fields()
 
     fields = [
         'EMAIL_ADDRESS_',
