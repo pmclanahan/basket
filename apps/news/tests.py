@@ -11,7 +11,7 @@ from news.models import Subscriber
 
 
 class UserTest(TestCase):
-    @patch('news.views.update_user')
+    @patch('news.views.update_user.delay')
     def test_user_set(self, update_user):
         """If the user view is sent a POST request, it should attempt to update
         the user's info.
@@ -30,7 +30,7 @@ class UpdateUserTest(TestCase):
         self.sub = Subscriber.objects.create(email='dude@example.com')
         self.rf = RequestFactory()
 
-    @patch('news.views.update_user')
+    @patch('news.views.update_user.delay')
     def test_update_user_task_helper(self, uu_mock):
         """
         `update_user` should always get an email and token.
@@ -48,7 +48,7 @@ class UpdateUserTest(TestCase):
                                    self.sub.email, self.sub.token,
                                    False, tasks.SUBSCRIBE, True)
 
-    @patch('news.views.update_user')
+    @patch('news.views.update_user.delay')
     def test_update_user_task_helper_no_sub(self, uu_mock):
         """
         Should find sub from submitted email when not provided.
@@ -65,7 +65,7 @@ class UpdateUserTest(TestCase):
                                    self.sub.email, self.sub.token,
                                    False, tasks.SUBSCRIBE, True)
 
-    @patch('news.views.update_user')
+    @patch('news.views.update_user.delay')
     def test_update_user_task_helper_create(self, uu_mock):
         """
         Should create a user and tell the task about it if email not known.
@@ -83,7 +83,7 @@ class UpdateUserTest(TestCase):
                                    sub.email, sub.token,
                                    True, tasks.SUBSCRIBE, True)
 
-    @patch('news.views.update_user')
+    @patch('news.views.update_user.delay')
     def test_update_user_task_helper_error(self, uu_mock):
         """
         Should not call the task if no email or token provided.

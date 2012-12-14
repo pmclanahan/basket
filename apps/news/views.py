@@ -59,20 +59,12 @@ def update_user_task(request, type, data=None, optin=True):
                                           'is required.'},
                                  status=400)
 
-    # When celery is turned on, use delay to call update_user and
-    # don't catch any exceptions. For now, return an error if
-    # something goes wrong.
-    try:
-        update_user(data, sub.email, sub.token, created, type, optin)
-        return json_response({
-            'status': 'ok',
-            'token': sub.token,
-            'created': created,
-        })
-    except (NewsletterException, UnauthorizedException), e:
-        return json_response({'status': 'error',
-                              'desc': e.message},
-                             status=500)
+    update_user.delay(data, sub.email, sub.token, created, type, optin)
+    return json_response({
+        'status': 'ok',
+        'token': sub.token,
+        'created': created,
+    })
 
 
 def get_user(token=None, email=None):
@@ -126,14 +118,8 @@ def get_user(token=None, email=None):
 @logged_in
 @csrf_exempt
 def confirm(request, token):
-    # Until celery is turned on, return a message immediately
-    try:
-        confirm_user(request.subscriber.token)
-        return json_response({'status': 'ok'})
-    except (NewsletterException, UnauthorizedException), e:
-        return json_response({'status': 'error',
-                              'desc': e.message},
-                             status=500)
+    confirm_user.delay(request.subscriber.token)
+    return json_response({'status': 'ok'})
 
 
 @require_POST
@@ -168,16 +154,8 @@ def subscribe_sms(request):
 
     optin = request.POST.get('optin', 'N') == 'Y'
 
-    # When celery is turned on, use delay to call update_user and
-    # don't catch any exceptions. For now, return an error if
-    # something goes wrong.
-    try:
-        add_sms_user(msg_name, mobile, optin)
-        return json_response({'status': 'ok'})
-    except (NewsletterException, UnauthorizedException), e:
-        return json_response({'status': 'error',
-                              'desc': e.message},
-                             status=500)
+    add_sms_user.delay(msg_name, mobile, optin)
+    return json_response({'status': 'ok'})
 
 
 @require_POST
@@ -247,7 +225,7 @@ def custom_unsub_reason(request):
 def custom_student_reps(request):
     data = dict(request.POST.items())
     try:
-        update_student_reps(data)
+        update_student_reps.delay(data)
         return json_response({'status': 'ok'})
     except (NewsletterException, UnauthorizedException), e:
         return json_response({'status': 'error',

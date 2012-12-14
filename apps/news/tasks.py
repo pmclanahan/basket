@@ -1,3 +1,4 @@
+from urllib2 import URLError
 import uuid
 from email.utils import formatdate
 import datetime
@@ -18,7 +19,6 @@ from newsletters import *
 SUBSCRIBE = 1
 UNSUBSCRIBE = 2
 SET = 3
-
 
 # Double optin-in languages
 CONFIRM_SENDS = {
@@ -266,14 +266,10 @@ def handle_exception_and_fix(ext_name, record, task, e):
 
 
 def handle_exception(task, e):
-    # When celery is turn on, hande these exceptions here. Since
-    # celery isn't turned on yet, let them propagate.
-    #
-    # if isinstance(e, URLError):
-    #     # URL timeout, try again
-    #     task.retry(exc=e)
-    # elif isinstance(e, NewsletterException):
-    #     log.error('NewsletterException: %s' % e.message)
-    # elif isinstance(e, UnauthorizedException):
-    #     log.error('Email service provider auth failure')
-    raise e
+    if isinstance(e, URLError):
+         # URL timeout, try again
+         task.retry(exc=e)
+    elif isinstance(e, NewsletterException):
+         log.error('NewsletterException: %s' % e.message)
+    elif isinstance(e, UnauthorizedException):
+         log.error('Email service provider auth failure')
