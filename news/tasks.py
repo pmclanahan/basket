@@ -640,7 +640,7 @@ def send_welcomes(user_data, newsletter_slugs, format):
 
 
 @et_task
-def confirm_user(token):
+def confirm_user(token, user_data=None):
     """
     Confirm any pending subscriptions for the user with this token.
 
@@ -654,9 +654,11 @@ def confirm_user(token):
     :raises: BasketError for fatal errors, NewsletterException for retryable
         errors.
     """
-    user_data = get_user_data(token=token)
     if user_data is None:
-        raise BasketError(MSG_USER_NOT_FOUND)
+        user_data = get_user_data(token=token)
+
+        if user_data is None:
+            raise BasketError(MSG_USER_NOT_FOUND)
 
     if user_data['confirmed']:
         log.info('In confirm_user, user with token %s '
