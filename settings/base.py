@@ -1,5 +1,4 @@
 import os
-import sys
 
 # Application version.
 VERSION = (0, 1)
@@ -101,9 +100,6 @@ INSTALLED_APPS = (
     'django.contrib.staticfiles',
 )
 
-if 'test' in sys.argv:
-    INSTALLED_APPS += ('django_nose',)
-
 # Default newsletter welcome message ID for HTML format.
 # There must also exist a text-format message with the same
 # ID with "_T" appended, e.g. "39_T"
@@ -184,8 +180,6 @@ LOGGING = {
         },
     },
 }
-
-TEST_RUNNER = 'django_nose.NoseTestSuiteRunner'
 
 # Tells the product_details module where to find our local JSON files.
 # This ultimately controls how LANGUAGES are constructed.
