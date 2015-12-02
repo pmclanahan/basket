@@ -10,8 +10,8 @@ from mock import Mock, patch
 
 from news import tasks
 from news.models import BlockedEmail
-from news.tasks import SUBSCRIBE
 from news.utils import (
+    SUBSCRIBE, UNSUBSCRIBE, SET,
     email_block_list_cache,
     email_is_blocked,
     EmailValidationError,
@@ -232,6 +232,114 @@ class UpdateUserTaskTests(TestCase):
 
         self.assert_response_ok(response, token='mytoken', created=True)
         self.update_user.delay.assert_called_with(data, 'a@example.com', 'mytoken', SUBSCRIBE, True)
+
+    @patch('news.utils.newsletter_slugs')
+    @patch('news.utils.newsletter_private_slugs')
+    def test_success_with_unsubscribe_private_newsletter(self, mock_private, mock_slugs):
+        """
+        Should be able to unsubscribe from a private newsletter regardless.
+        """
+        mock_private.return_value = ['private']
+        mock_slugs.return_value = ['private', 'other']
+        request = self.factory.post('/')
+        data = {'token': 'mytoken', 'email': 'dude@example.com', 'newsletters': 'private'}
+        response = update_user_task(request, UNSUBSCRIBE, data)
+
+        self.assert_response_ok(response)
+        self.update_user.delay.assert_called_with(data, 'dude@example.com', None,
+                                                  UNSUBSCRIBE, True)
+
+    @patch('news.utils.newsletter_and_group_slugs')
+    @patch('news.utils.newsletter_private_slugs')
+    def test_subscribe_private_newsletter_ssl_required(self, mock_private, mock_slugs):
+        """
+        If subscribing to a private newsletter and the request isn't HTTPS, return a 401.
+        """
+        mock_private.return_value = ['private']
+        mock_slugs.return_value = ['private', 'other']
+        data = {'newsletters': 'private', 'email': 'dude@example.com'}
+        request = self.factory.post('/', data)
+        request.is_secure = lambda: False
+        response = update_user_task(request, SUBSCRIBE, data)
+        self.assert_response_error(response, 401, errors.BASKET_SSL_REQUIRED)
+
+    @patch('news.utils.newsletter_and_group_slugs')
+    @patch('news.utils.newsletter_private_slugs')
+    @patch('news.utils.has_valid_api_key')
+    def test_subscribe_private_newsletter_invalid_api_key(self, mock_api_key, mock_private, mock_slugs):
+        """
+        If subscribing to a private newsletter and the request has an invalid API key,
+        return a 401.
+        """
+        mock_private.return_value = ['private']
+        mock_slugs.return_value = ['private', 'other']
+        data = {'newsletters': 'private', 'email': 'dude@example.com'}
+        request = self.factory.post('/', data)
+        request.is_secure = lambda: True
+        mock_api_key.return_value = False
+
+        response = update_user_task(request, SUBSCRIBE, data)
+        self.assert_response_error(response, 401, errors.BASKET_AUTH_ERROR)
+        mock_api_key.assert_called_with(request)
+
+    @patch('news.utils.newsletter_slugs')
+    @patch('news.utils.newsletter_private_slugs')
+    def test_set_private_newsletter_ssl_required(self, mock_private, mock_slugs):
+        """
+        If subscribing to a private newsletter and the request isn't HTTPS, return a 401.
+        """
+        mock_private.return_value = ['private']
+        mock_slugs.return_value = ['private', 'other']
+        data = {'newsletters': 'private', 'email': 'dude@example.com'}
+        request = self.factory.post('/', data)
+        request.is_secure = lambda: False
+        response = update_user_task(request, SET, data)
+        self.assert_response_error(response, 401, errors.BASKET_SSL_REQUIRED)
+
+    @patch('news.utils.newsletter_slugs')
+    @patch('news.utils.newsletter_private_slugs')
+    @patch('news.utils.has_valid_api_key')
+    def test_set_private_newsletter_invalid_api_key(self, mock_api_key, mock_private, mock_slugs):
+        """
+        If subscribing to a private newsletter and the request has an invalid API key,
+        return a 401.
+        """
+        mock_private.return_value = ['private']
+        mock_slugs.return_value = ['private', 'other']
+        data = {'newsletters': 'private', 'email': 'dude@example.com'}
+        request = self.factory.post('/', data)
+        request.is_secure = lambda: True
+        mock_api_key.return_value = False
+
+        response = update_user_task(request, SET, data)
+        self.assert_response_error(response, 401, errors.BASKET_AUTH_ERROR)
+        mock_api_key.assert_called_with(request)
+
+    @patch('news.utils.newsletter_slugs')
+    @patch('news.utils.newsletter_and_group_slugs')
+    @patch('news.utils.newsletter_private_slugs')
+    @patch('news.utils.has_valid_api_key')
+    def test_private_newsletter_success(self, mock_api_key, mock_private, mock_group_slugs,
+                                        mock_slugs):
+        """
+        If subscribing to a private newsletter and the request has an invalid API key,
+        return a 401.
+        """
+        mock_private.return_value = ['private']
+        mock_slugs.return_value = ['private', 'other']
+        mock_group_slugs.return_value = ['private', 'other']
+        data = {'newsletters': 'private', 'email': 'dude@example.com'}
+        request = self.factory.post('/', data)
+        request.is_secure = lambda: True
+        mock_api_key.return_value = True
+
+        response = update_user_task(request, SUBSCRIBE, data)
+        self.assert_response_ok(response)
+        mock_api_key.assert_called_with(request)
+
+        response = update_user_task(request, SET, data)
+        self.assert_response_ok(response)
+        mock_api_key.assert_called_with(request)
 
 
 class TestGetAcceptLanguages(TestCase):
