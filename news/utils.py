@@ -27,7 +27,7 @@ from news.newsletters import (
     newsletter_languages,
     newsletter_slugs,
     slug_to_vendor_id,
-)
+    newsletter_private_slugs)
 
 
 # Error messages
@@ -219,17 +219,36 @@ def update_user_task(request, api_call_type, data=None, optin=True, sync=False):
 
     newsletters = data.get('newsletters', None)
     if newsletters:
+        newsletters = [x.strip() for x in newsletters.split(',')]
         if api_call_type == SUBSCRIBE:
             all_newsletters = newsletter_and_group_slugs()
         else:
             all_newsletters = newsletter_slugs()
-        for nl in [x.strip() for x in newsletters.split(',')]:
+
+        private_newsletters = newsletter_private_slugs()
+
+        for nl in newsletters:
             if nl not in all_newsletters:
                 return HttpResponseJSON({
                     'status': 'error',
                     'desc': 'invalid newsletter',
                     'code': errors.BASKET_INVALID_NEWSLETTER,
                 }, 400)
+
+            if api_call_type != UNSUBSCRIBE and nl in private_newsletters:
+                if not request.is_secure():
+                    return HttpResponseJSON({
+                        'status': 'error',
+                        'desc': 'private newsletter subscription requires SSL',
+                        'code': errors.BASKET_SSL_REQUIRED,
+                    }, 401)
+
+                if not has_valid_api_key(request):
+                    return HttpResponseJSON({
+                        'status': 'error',
+                        'desc': 'private newsletter subscription requires a valid API key',
+                        'code': errors.BASKET_AUTH_ERROR,
+                    }, 401)
 
     if 'lang' in data:
         if not language_code_is_valid(data['lang']):

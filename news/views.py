@@ -612,11 +612,12 @@ def lookup_user(request):
     return HttpResponseJSON(user_data, status_code)
 
 
+@require_GET
+@cache_control(max_age=300)
 def list_newsletters(request):
     """
     Public web page listing currently active newsletters.
     """
-
-    active_newsletters = Newsletter.objects.filter(active=True)
+    active_newsletters = Newsletter.objects.filter(active=True, private=False)
     return render(request, 'news/newsletters.html',
                   {'newsletters': active_newsletters})
