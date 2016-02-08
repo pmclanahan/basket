@@ -1,0 +1,29 @@
+db:
+  image: mysql:5.6
+  environment:
+    - MYSQL_DATABASE=basket
+    - MYSQL_ALLOW_EMPTY_PASSWORD=1
+base:
+  build: .
+  environment:
+    - PYTHONDONTWRITEBYTECODE=1
+    - DATABASE_URL=mysql://root@db/basket
+    - ALLOWED_HOSTS=*
+    - SECRET_KEY=59114b6a-2858-4caf-8878-482a24ee9542
+    - SUPERTOKEN=im-super-thanks-for-asking
+web:
+  extends: base
+  ports:
+    - "8000:8000"
+  volumes:
+    - .:/app
+  environment:
+    - DEBUG=True
+  links:
+    - db
+  command: ./bin/run-dev.sh
+test:
+  extends: base
+  command: ./bin/run-tests.sh
+  links:
+    - db

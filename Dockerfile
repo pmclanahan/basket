@@ -8,7 +8,7 @@ CMD ["bin/run-prod.sh"]
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential python2.7 libpython2.7 python-dev \
-        python-pip gettext python-mysqldb
+        python-pip gettext python-mysqldb netcat
 
 # Get pip 8
 COPY bin/pipstrap.py bin/pipstrap.py
