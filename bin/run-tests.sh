@@ -1,6 +1,7 @@
 #!/bin/sh
+set -ex
 
-./bin/wait-for-db.sh || exit 1
+urlwait
 ./bin/run-common.sh
 py.test news
 

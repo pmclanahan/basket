@@ -1,6 +1,7 @@
 #!/bin/sh
+set -ex
 
-./bin/wait-for-db.sh || exit 1
+urlwait
 ./bin/run-common.sh
 ./manage.py runserver 0.0.0.0:8000
 
